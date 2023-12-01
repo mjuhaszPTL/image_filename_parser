@@ -1,26 +1,18 @@
-# Image and object tags
+# Image filename processing
 
 ## Introduction
 
-In this tutorial we will be focusing on working with tags using Supervisely SDK. We'll go through complete cycle from creating TagMeta in project to assigning Tags to images and objects directly.
-
-You will learn:
-
-1. how to create tags for different tasks and scenarios with various parameters.
-2. how to create tags (`sly.TagMeta`) in project
-3. how to assign tags (`sly.Tag`) to images and objects
-
-📗 Everything you need to reproduce [this tutorial is on GitHub](https://github.com/supervisely-ecosystem/tutorial-working-with-tags): source code and demo data.
+This code is designed to handle filenames and tags using the Supervisely SDK. If the necessary tags are not present in a project, it will create those tags. Subsequently, it parses the images within the dataset, populating the newly created tags with their respective values.
 
 ## How to debug this tutorial
 
 **Step 1.** Prepare `~/supervisely.env` file with credentials. [Learn more here.](https://developer.supervise.ly/getting-started/basics-of-authentication#how-to-use-in-python)
 
-**Step 2.** Clone [repository](https://github.com/supervisely-ecosystem/tutorial-working-with-tags) with source code and demo data and create [Virtual Environment](https://docs.python.org/3/library/venv.html).
+**Step 2.** Clone [repository](https://github.com/mjuhaszPTL/image_filename_parser)
 
 ```
-git clone https://github.com/supervisely-ecosystem/tutorial-working-with-tags
-cd tutorial-working-with-tags
+git clone https://github.com/mjuhaszPTL/image_filename_parser
+cd image_filename_parser
 ./create_venv.sh
 ```
 
@@ -30,19 +22,19 @@ cd tutorial-working-with-tags
 code -r .
 ```
 
-**Step 4.** Get [**Lemons (Annotated)**](https://ecosystem.supervise.ly/projects/lemons-annotated) project from ecosystem. Lemons (Annotated) is an example project with annotated lemons and kiwi fruits, with 6 images in it.
-
-<figure><img src="https://user-images.githubusercontent.com/48913536/193692418-731fa985-4958-4a42-893a-411e558faa04.png" alt=""><figcaption></figcaption></figure>
-
-**Step 5.** change ✅ project ID ✅ in `local.env` file by copying the ID from the context menu of the project.
+**Step 4.** change ✅ project ID ✅ in `local.env` file by copying the ID from the context menu of the project.
 
 ```
-PROJECT_ID=111 # ⬅️ change value
+TEAM_ID = 9
+WORKSPACE_ID = 11
+PROJECT_ID = 202
+DATASET_ID = 678
 ```
 
-<figure><img src="https://user-images.githubusercontent.com/48913536/193692408-6a1ba506-751b-4634-937e-3f2cebc2b22c.png" alt=""><figcaption></figcaption></figure>
+**Step 5.** Start debugging `src/main.py`
 
-**Step 6.** Start debugging `src/main.py`
+
+# TODO: update rest of readme
 
 ## **Part 1.** Tag Meta
 
