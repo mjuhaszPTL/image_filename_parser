@@ -1,138 +1,164 @@
 import os
-from dotenv import load_dotenv
-import supervisely as sly
 
+import supervisely as sly
+import supervisely.app.development as sly_app_development
+import supervisely.app.widgets as widgets
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+need_processing = widgets.Switch(switched=True)
+parse_btn = widgets.Button("Parse filename")
+processing_field = widgets.Field(
+    title="Marcell's image filename processor",
+    description="If turned on, the filename of the image will be parsed and the corresponding tags will be filled",
+    content=need_processing,
+)
+
+layout = widgets.Container(
+    widgets=[
+        processing_field,
+        parse_btn,
+    ]
+)
+app = sly.Application(layout=layout)
+
+# Enabling advanced debug mode
 if sly.is_development():
     load_dotenv("local.env")
     load_dotenv(os.path.expanduser("~/supervisely.env"))
-api = sly.Api()
+    team_id = sly.env.team_id()
+    workspace_id = sly.env.workspace_id()
+    project_id = sly.env.project_id()
+    dataset_id = sly.env.dataset_id()
+    sly_app_development.supervisely_vpn_network(action="up")
+    sly_app_development.create_debug_task(team_id, port="8000")
 
-####################
-# Part 1: Tag Meta #
-####################
-
-# Let's start with createing a simple TagMeta
-fruit_tag_meta = sly.TagMeta(
-    name="fruits",
-    applicable_to=sly.TagApplicableTo.OBJECTS_ONLY,
-    value_type=sly.TagValueType.NONE,
-)
-
-# Now let's create a simple TagMeta for fruit name
-fruit_name_tag_meta = sly.TagMeta(
-    name="name",
-    applicable_to=sly.TagApplicableTo.OBJECTS_ONLY,
-    value_type=sly.TagValueType.ANY_STRING,
-    applicable_classes=["lemon", "kiwi"],
-)
-
-# Now let's create a TagMeta for "kiwi" with "oneof_string" value type
-fruit_size_tag_meta = sly.TagMeta(
-    name="size",
-    applicable_to=sly.TagApplicableTo.OBJECTS_ONLY,
-    value_type=sly.TagValueType.ONEOF_STRING,
-    possible_values=["small", "medium", "big"],
-)
-
-# Now we create a TagMeta with "any_number" value type for counting fruits on image
-fruit_origin_tag_meta = sly.TagMeta(
-    name="imported_from",
-    value_type=sly.TagValueType.ANY_STRING,
-    applicable_to=sly.TagApplicableTo.OBJECTS_ONLY,
-    applicable_classes=["lemon", "kiwi"],
-)
+api = sly.Api.from_env()
 
 
-# and one more TagMeta with "any_string" value type to enter the origin of the fruit into it
-fruits_count_tag_meta = sly.TagMeta(
-    name="fruits_count",
-    value_type=sly.TagValueType.ANY_NUMBER,
-    applicable_to=sly.TagApplicableTo.IMAGES_ONLY,
-)
+@parse_btn.click
+def parse_filename_and_update_tags():
+    if not need_processing.is_on():
+        # Checking if the processing is turned on in the UI.
+        return
 
+    sly.logger.info("Image opened, parsing filename and updating tags")
 
-# Bring all created TagMetas together in TagMetaCollection or list
-tag_metas = [
-    fruit_tag_meta,
-    fruit_name_tag_meta,
-    fruit_size_tag_meta,
-    fruit_origin_tag_meta,
-    fruits_count_tag_meta,
-]
+    # Fetch the list of images in the dataset
+    images_info = api.image.get_list(dataset_id)
 
-###################################
-# Part 2. Add TagMetas to project #
-###################################
-
-# Get project meta from server
-project_id = sly.env.project_id()
-project_meta_json = api.project.get_meta(id=project_id)
-project_meta = sly.ProjectMeta.from_json(data=project_meta_json)
-
-# Check that our created tag metas for lemon and kiwi don't exist already in project meta
-# And if not, add them to project meta
-for tag_meta in tag_metas:
-    if tag_meta not in project_meta.tag_metas:
-        project_meta = project_meta.add_tag_meta(new_tag_meta=tag_meta)
-
-# Update project meta on Supervisely instance after adding
-# Tag Metas to project meta and get updated project meta
-api.project.update_meta(id=project_id, meta=project_meta)
-project_meta_json = api.project.get_meta(id=project_id)
-project_meta = sly.ProjectMeta.from_json(data=project_meta_json)
-
-######################################################################
-# Part 3. Create Tags and update annotation on server #
-######################################################################
-
-# get list of datasets in our project
-datasets = api.dataset.get_list(project_id)
-dataset_ids = [dataset.id for dataset in datasets]
-# iterate over all images in project datasets
-for dataset_id in dataset_ids:
-    # get list of images in dataset
-    images_infos = api.image.get_list(dataset_id=dataset_id)
-    for image_info in images_infos:
-        # get image id from image info
+    # Iterate through each image in the dataset
+    for image_info in tqdm(images_info):
         image_id = image_info.id
+        image_name = image_info.name
 
-        # download annotation
+        # Parse the filename
+        parts = image_name.split("_")
+
+        # Extract counter
+        counter = int(parts[0])
+
+        # Extract part_id
+        part_id = parts[1].split("-")[0]
+
+        # Extract color (if available)
+        if len(parts) > 2:
+            color_parts = parts[1].split("-")[1:]
+            color = "-".join(color_parts)
+        else:
+            color = ""
+
+        # Extract camera_id
+        camera_id = parts[-1].split(".")[0]
+
+        sly.logger.info(
+            f"Image ID: {image_id}, "
+            f"Counter: {counter}, "
+            f"Part ID: {part_id}, "
+            f"Color: {color}, "
+            f"Camera ID: {camera_id}"
+        )
+        # update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id)
+        update_tags_annotation(api, image_id, counter, part_id, color, camera_id)
+
+
+def update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id):
+    try:
+        # Creating new tags based on the parsed values
+        new_meta = {"counter": counter, "part_id": part_id, "color": color, "camera_id": camera_id}
+
+        # Update the tags for the image in Supervisely platform
+        api.image.update_meta(id=image_id, meta=new_meta)
+
+        sly.logger.info(f"Tags updated successfully for image {image_id}")
+    except Exception as e:
+        sly.logger.error(f"Error updating tags for image {image_id}: {e}")
+
+
+def update_tags_annotation(api, image_id, counter, part_id, color, camera_id):
+    try:
+        global project_meta
+        project_meta_json = api.project.get_meta(id=project_id)
+        project_meta = sly.ProjectMeta.from_json(data=project_meta_json)
+
+        # Fetch existing annotations
         ann_json = api.annotation.download_json(image_id=image_id)
         ann = sly.Annotation.from_json(data=ann_json, project_meta=project_meta)
 
-        # create and assign Tag to image
-        fruits_count_tag = sly.Tag(meta=fruits_count_tag_meta, value=len(ann.labels))
-        ann = ann.add_tag(fruits_count_tag)
+        counter_tag_meta = project_meta.get_tag_meta("counter")
+        part_id_tag_meta = project_meta.get_tag_meta("part_id")
+        color_tag_meta = project_meta.get_tag_meta("color")
+        camera_tag_meta = project_meta.get_tag_meta("camera_id")
 
-        # iterate over objects in annotation and assign appropriate tag
-        new_labels = []
-        for label in ann.labels:
-            new_label = None
-            if label.obj_class.name == "lemon":
-                name_tag = sly.Tag(meta=fruit_name_tag_meta, value="lemon")
-                size_tag = sly.Tag(meta=fruit_size_tag_meta, value="medium")
-                origin_tag = sly.Tag(meta=fruit_origin_tag_meta, value="Spain")
-                new_label = label.add_tags([name_tag, size_tag, origin_tag])
-            elif label.obj_class.name == "kiwi":
-                name_tag = sly.Tag(meta=fruit_name_tag_meta, value="kiwi")
-                size_tag = sly.Tag(meta=fruit_size_tag_meta, value="small")
-                origin_tag = sly.Tag(meta=fruit_origin_tag_meta, value="Italy")
-                new_label = label.add_tags([name_tag, size_tag, origin_tag])
-            if new_label:
-                new_labels.append(new_label)
+        if counter_tag_meta or part_id_tag_meta or color_tag_meta or camera_tag_meta:
+            ann = ann.delete_tag_by_name("counter")
+            ann = ann.delete_tag_by_name("part_id")
+            ann = ann.delete_tag_by_name("color")
+            ann = ann.delete_tag_by_name("camera_id")
+        else:
+            counter_tag_meta = sly.TagMeta(
+                name="counter",
+                value_type=sly.TagValueType.ANY_NUMBER,
+            )
+            part_id_tag_meta = sly.TagMeta(
+                name="part_id",
+                value_type=sly.TagValueType.ANY_STRING,
+            )
+            color_tag_meta = sly.TagMeta(
+                name="color",
+                value_type=sly.TagValueType.ANY_STRING,
+            )
+            camera_tag_meta = sly.TagMeta(
+                name="camera_id",
+                value_type=sly.TagValueType.ONEOF_STRING,
+                possible_values=["NORTH", "SOUTH", "EAST", "WEST", "TOP", "SIDE"],
+            )
 
-        # update and upload ann to Supervisely instance
-        ann = ann.clone(labels=new_labels)
+            tag_metas = [counter_tag_meta, part_id_tag_meta, color_tag_meta, camera_tag_meta]
+
+            for tag_meta in tag_metas:
+                if tag_meta not in project_meta.tag_metas:
+                    project_meta = project_meta.add_tag_meta(new_tag_meta=tag_meta)
+            api.project.update_meta(id=project_id, meta=project_meta)
+            project_meta_json = api.project.get_meta(id=project_id)
+            project_meta = sly.ProjectMeta.from_json(data=project_meta_json)
+
+        counter_tag = sly.Tag(meta=counter_tag_meta, value=counter)
+        part_id_tag = sly.Tag(meta=part_id_tag_meta, value=part_id)
+        camera_id_tag = sly.Tag(meta=camera_tag_meta, value=camera_id)
+
+        tags = [counter_tag, part_id_tag, camera_id_tag]
+        if color:
+            color_tag = sly.Tag(meta=color_tag_meta, value=color)
+            tags.append(color_tag)
+        else:
+            sly.logger.warn(f"No color tag found for image {image_id}")
+
+        ann = ann.add_tags(tags)
+
+        # Update the tags for the given image in Supervisely
         api.annotation.upload_ann(img_id=image_id, ann=ann)
 
-    # get tag meta from project meta
-    tag_meta = project_meta.get_tag_meta("fruits")
-
-    # create a list of images ids from images infos
-    image_ids = [image_info.id for image_info in images_infos]
-
-    # get tag meta id
-    tag_meta_id = tag_meta.sly_id
-
-    # update tags in batches.
-    api.image.add_tag_batch(image_ids, tag_meta_id, value=None, tag_meta=tag_meta)
+        # sly.logger.info(f"Tags updated successfully for image {image_id}")
+    except Exception as e:
+        sly.logger.error(f"Error updating tags for image {image_id}: {e}")
