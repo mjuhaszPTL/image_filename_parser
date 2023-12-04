@@ -8,19 +8,28 @@ from tqdm import tqdm
 
 need_processing = widgets.Switch(switched=True)
 parse_btn = widgets.Button("Parse filename")
+stop_btn = widgets.Button("Stop")
 processing_field = widgets.Field(
     title="Marcell's image filename processor",
     description="If turned on, the filename of the image will be parsed and the corresponding tags will be filled",
     content=need_processing,
 )
 
+progress_bar = widgets.Progress()
+description_msg = widgets.Text()
+finish_msg = widgets.Text(status="success")
 layout = widgets.Container(
     widgets=[
         processing_field,
         parse_btn,
+        stop_btn,
+        progress_bar,
+        description_msg,
+        finish_msg,
     ]
 )
 app = sly.Application(layout=layout)
+stop_flag = False
 
 # Enabling advanced debug mode
 if sly.is_development():
@@ -36,8 +45,15 @@ if sly.is_development():
 api = sly.Api.from_env()
 
 
+@stop_btn.click
+def stop_processing():
+    global stop_flag
+    stop_flag = True
+
+
 @parse_btn.click
 def parse_filename_and_update_tags():
+    global stop_flag
     if not need_processing.is_on():
         # Checking if the processing is turned on in the UI.
         return
@@ -46,40 +62,51 @@ def parse_filename_and_update_tags():
 
     # Fetch the list of images in the dataset
     images_info = api.image.get_list(dataset_id)
+    total_images = len(images_info)
 
-    # Iterate through each image in the dataset
-    for image_info in tqdm(images_info):
-        image_id = image_info.id
-        image_name = image_info.name
+    with progress_bar(total=total_images) as pbar:
+        # Iterate through each image in the dataset
+        for image_info in tqdm(images_info):
+            if stop_flag:
+                # Stop processing if the flag is set
+                sly.logger.info("Processing stopped by user.")
+                break
 
-        # Parse the filename
-        parts = image_name.split("_")
+            image_id = image_info.id
+            image_name = image_info.name
+            description_msg.set(f"Processing image {image_name}", "info")
 
-        # Extract counter
-        counter = int(parts[0])
+            # Parse the filename
+            parts = image_name.split("_")
 
-        # Extract part_id
-        part_id = parts[1].split("-")[0]
+            # Extract counter
+            counter = int(parts[0])
 
-        # Extract color (if available)
-        if len(parts) > 2:
-            color_parts = parts[1].split("-")[1:]
-            color = "-".join(color_parts)
-        else:
-            color = ""
+            # Extract part_id
+            part_id = parts[1].split("-")[0]
 
-        # Extract camera_id
-        camera_id = parts[-1].split(".")[0]
+            # Extract color (if available)
+            if len(parts) > 2:
+                color_parts = parts[1].split("-")[1:]
+                color = "-".join(color_parts)
+            else:
+                color = ""
 
-        sly.logger.info(
-            f"Image ID: {image_id}, "
-            f"Counter: {counter}, "
-            f"Part ID: {part_id}, "
-            f"Color: {color}, "
-            f"Camera ID: {camera_id}"
-        )
-        # update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id)
-        update_tags_annotation(api, image_id, counter, part_id, color, camera_id)
+            # Extract camera_id
+            camera_id = parts[-1].split(".")[0]
+
+            sly.logger.info(
+                f"Image ID: {image_id}, "
+                f"Counter: {counter}, "
+                f"Part ID: {part_id}, "
+                f"Color: {color}, "
+                f"Camera ID: {camera_id}"
+            )
+            # update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id)
+            update_tags_annotation(api, image_id, counter, part_id, color, camera_id)
+            pbar.update(1)
+        finish_msg.text = "Finished"
+    stop_flag = False
 
 
 def update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id):
