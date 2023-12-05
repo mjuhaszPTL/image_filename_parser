@@ -4,7 +4,6 @@ import supervisely as sly
 import supervisely.app.development as sly_app_development
 import supervisely.app.widgets as widgets
 from dotenv import load_dotenv
-from tqdm import tqdm
 
 # Enabling advanced debug mode
 if sly.is_development():
@@ -81,7 +80,7 @@ def parse_filename_and_update_tags():
 
         with progress_bar(total=total_images) as pbar:
             # Iterate through each image in the dataset
-            for image_info in tqdm(images_info):
+            for image_info in images_info:
                 if stop_flag:
                     # Stop processing if the flag is set
                     sly.logger.info("Processing stopped by user.")
