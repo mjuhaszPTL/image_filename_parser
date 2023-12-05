@@ -6,6 +6,17 @@ import supervisely.app.widgets as widgets
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+# Enabling advanced debug mode
+if sly.is_development():
+    load_dotenv("local.env")
+    load_dotenv(os.path.expanduser("~/supervisely.env"))
+    team_id = sly.env.team_id()
+    workspace_id = sly.env.workspace_id()
+    # project_id = sly.env.project_id()
+    # dataset_id = sly.env.dataset_id()
+    sly_app_development.supervisely_vpn_network(action="up")
+    sly_app_development.create_debug_task(team_id, port="8000")
+
 need_processing = widgets.Switch(switched=True)
 parse_btn = widgets.Button("Parse filename")
 stop_btn = widgets.Button("Stop")
@@ -18,9 +29,15 @@ processing_field = widgets.Field(
 progress_bar = widgets.Progress()
 description_msg = widgets.Text()
 finish_msg = widgets.Text(status="success")
+select_dataset = widgets.SelectDataset(
+    multiselect=True,
+    select_all_datasets=True
+)
+
 layout = widgets.Container(
     widgets=[
         processing_field,
+        select_dataset,
         parse_btn,
         stop_btn,
         progress_bar,
@@ -29,20 +46,8 @@ layout = widgets.Container(
     ]
 )
 app = sly.Application(layout=layout)
-stop_flag = False
-
-# Enabling advanced debug mode
-if sly.is_development():
-    load_dotenv("local.env")
-    load_dotenv(os.path.expanduser("~/supervisely.env"))
-    team_id = sly.env.team_id()
-    workspace_id = sly.env.workspace_id()
-    project_id = sly.env.project_id()
-    dataset_id = sly.env.dataset_id()
-    sly_app_development.supervisely_vpn_network(action="up")
-    sly_app_development.create_debug_task(team_id, port="8000")
-
 api = sly.Api.from_env()
+stop_flag = False
 
 
 @stop_btn.click
@@ -60,53 +65,63 @@ def parse_filename_and_update_tags():
 
     sly.logger.info("Image opened, parsing filename and updating tags")
 
-    # Fetch the list of images in the dataset
-    images_info = api.image.get_list(dataset_id)
-    total_images = len(images_info)
+    selected_dataset_ids = select_dataset.get_selected_ids()
+    selected_project_id = select_dataset.get_selected_project_id()
+    if not selected_dataset_ids:
+        sly.logger.warn("No dataset selected.")
+        return
+    if not selected_project_id:
+        sly.logger.warn("No project selected.")
+        return
 
-    with progress_bar(total=total_images) as pbar:
-        # Iterate through each image in the dataset
-        for image_info in tqdm(images_info):
-            if stop_flag:
-                # Stop processing if the flag is set
-                sly.logger.info("Processing stopped by user.")
-                break
+    for selected_dataset_id in selected_dataset_ids:
+        # Fetch the list of images in the dataset
+        images_info = api.image.get_list(selected_dataset_id)
+        total_images = len(images_info)
 
-            image_id = image_info.id
-            image_name = image_info.name
-            description_msg.set(f"Processing image {image_name}", "info")
+        with progress_bar(total=total_images) as pbar:
+            # Iterate through each image in the dataset
+            for image_info in tqdm(images_info):
+                if stop_flag:
+                    # Stop processing if the flag is set
+                    sly.logger.info("Processing stopped by user.")
+                    break
 
-            # Parse the filename
-            parts = image_name.split("_")
+                image_id = image_info.id
+                image_name = image_info.name
+                description_msg.set(f"Processing image {image_name}", "info")
 
-            # Extract counter
-            counter = int(parts[0])
+                # Parse the filename
+                parts = image_name.split("_")
 
-            # Extract part_id
-            part_id = parts[1].split("-")[0]
+                # Extract counter
+                counter = int(parts[0])
 
-            # Extract color (if available)
-            if len(parts) > 2:
-                color_parts = parts[1].split("-")[1:]
-                color = "-".join(color_parts)
-            else:
-                color = ""
+                # Extract part_id
+                part_id = parts[1].split("-")[0]
 
-            # Extract camera_id
-            camera_id = parts[-1].split(".")[0]
+                # Extract color (if available)
+                if len(parts) > 2:
+                    color_parts = parts[1].split("-")[1:]
+                    color = "-".join(color_parts)
+                else:
+                    color = ""
 
-            sly.logger.info(
-                f"Image ID: {image_id}, "
-                f"Counter: {counter}, "
-                f"Part ID: {part_id}, "
-                f"Color: {color}, "
-                f"Camera ID: {camera_id}"
-            )
-            # update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id)
-            update_tags_annotation(api, image_id, counter, part_id, color, camera_id)
-            pbar.update(1)
-        finish_msg.text = "Finished"
-    stop_flag = False
+                # Extract camera_id
+                camera_id = parts[-1].split(".")[0]
+
+                sly.logger.info(
+                    f"Image ID: {image_id}, "
+                    f"Counter: {counter}, "
+                    f"Part ID: {part_id}, "
+                    f"Color: {color}, "
+                    f"Camera ID: {camera_id}"
+                )
+                # update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id)
+                update_tags_annotation(api, selected_project_id, image_id, counter, part_id, color, camera_id)
+                pbar.update(1)
+            finish_msg.text = "Finished"
+        stop_flag = False
 
 
 def update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id):
@@ -122,10 +137,10 @@ def update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_i
         sly.logger.error(f"Error updating tags for image {image_id}: {e}")
 
 
-def update_tags_annotation(api, image_id, counter, part_id, color, camera_id):
+def update_tags_annotation(api, selected_project_id, image_id, counter, part_id, color, camera_id):
     try:
         global project_meta
-        project_meta_json = api.project.get_meta(id=project_id)
+        project_meta_json = api.project.get_meta(id=selected_project_id)
         project_meta = sly.ProjectMeta.from_json(data=project_meta_json)
 
         # Fetch existing annotations
@@ -166,8 +181,8 @@ def update_tags_annotation(api, image_id, counter, part_id, color, camera_id):
             for tag_meta in tag_metas:
                 if tag_meta not in project_meta.tag_metas:
                     project_meta = project_meta.add_tag_meta(new_tag_meta=tag_meta)
-            api.project.update_meta(id=project_id, meta=project_meta)
-            project_meta_json = api.project.get_meta(id=project_id)
+            api.project.update_meta(id=selected_project_id, meta=project_meta)
+            project_meta_json = api.project.get_meta(id=selected_project_id)
             project_meta = sly.ProjectMeta.from_json(data=project_meta_json)
 
         counter_tag = sly.Tag(meta=counter_tag_meta, value=counter)
