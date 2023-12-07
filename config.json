@@ -1,17 +1,25 @@
 {
+  "name": "Image filename parser",
   "type": "app",
+  "categories": [
+    "images",
+    "labeling"
+  ],
   "version": "2.0.0",
-  "name": "Labeling Tool template",
-  "description": "Labeling Tool template",
+  "description": "Parse image filename and create tags",
   "docker_image": "supervisely/base-py-sdk:latest",
   "instance_version": "6.7.33",
-  "categories": ["images", "labeling"],
-  "task_location": "application_sessions",
+  "main_script": "src/main.py",
+  "task_location": "workspace_tasks",
   "icon": "",
   "icon_cover": true,
   "headless": false,
   "poster": "",
   "entrypoint": "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000",
-  "integrated_into": ["image_annotation_tool"],
-  "port": 8000
+  "port": 8000,
+  "context_menu": {
+    "target": [
+        "images_project"
+    ]
+  }
 }
