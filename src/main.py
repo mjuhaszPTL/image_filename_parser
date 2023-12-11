@@ -5,6 +5,8 @@ import supervisely.app.development as sly_app_development
 import supervisely.app.widgets as widgets
 from dotenv import load_dotenv
 
+from .parts_manager import PartsManager
+
 # Enabling advanced debug mode
 if sly.is_development():
     load_dotenv("local.env")
@@ -109,15 +111,31 @@ def parse_filename_and_update_tags():
                 # Extract camera_id
                 camera_id = parts[-1].split(".")[0]
 
+                parts_manager = PartsManager()
+                category = parts_manager.get_category_by_rebricakble_id(part_id)
+                if category is None:
+                    category = "Other"
+
                 sly.logger.info(
                     f"Image ID: {image_id}, "
                     f"Counter: {counter}, "
                     f"Part ID: {part_id}, "
                     f"Color: {color}, "
-                    f"Camera ID: {camera_id}"
+                    f"Camera ID: {camera_id}, "
+                    f"Category: {category}"
                 )
+
                 # update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_id)
-                update_tags_annotation(api, selected_project_id, image_id, counter, part_id, color, camera_id)
+                update_tags_annotation(
+                    api,
+                    selected_project_id,
+                    image_id,
+                    counter,
+                    part_id,
+                    color,
+                    camera_id,
+                    category
+                )
                 pbar.update(1)
             finish_msg.text = "Finished"
         stop_flag = False
@@ -136,7 +154,7 @@ def update_tags_custom_metadata(api, image_id, counter, part_id, color, camera_i
         sly.logger.error(f"Error updating tags for image {image_id}: {e}")
 
 
-def update_tags_annotation(api, selected_project_id, image_id, counter, part_id, color, camera_id):
+def update_tags_annotation(api, selected_project_id, image_id, counter, part_id, color, camera_id, category):
     try:
         global project_meta
         project_meta_json = api.project.get_meta(id=selected_project_id)
@@ -150,12 +168,18 @@ def update_tags_annotation(api, selected_project_id, image_id, counter, part_id,
         part_id_tag_meta = project_meta.get_tag_meta("part_id")
         color_tag_meta = project_meta.get_tag_meta("color")
         camera_tag_meta = project_meta.get_tag_meta("camera_id")
+        category_tag_meta = project_meta.get_tag_meta("category")
 
-        if counter_tag_meta or part_id_tag_meta or color_tag_meta or camera_tag_meta:
+        if counter_tag_meta or \
+           part_id_tag_meta or \
+           color_tag_meta or \
+           camera_tag_meta or \
+           category_tag_meta:
             ann = ann.delete_tag_by_name("counter")
             ann = ann.delete_tag_by_name("part_id")
             ann = ann.delete_tag_by_name("color")
             ann = ann.delete_tag_by_name("camera_id")
+            ann = ann.delete_tag_by_name("category")
         else:
             counter_tag_meta = sly.TagMeta(
                 name="counter",
@@ -174,8 +198,18 @@ def update_tags_annotation(api, selected_project_id, image_id, counter, part_id,
                 value_type=sly.TagValueType.ONEOF_STRING,
                 possible_values=["NORTH", "SOUTH", "EAST", "WEST", "TOP", "SIDE"],
             )
+            category_tag_meta = sly.TagMeta(
+                name="category",
+                value_type=sly.TagValueType.ANY_STRING,
+            )
 
-            tag_metas = [counter_tag_meta, part_id_tag_meta, color_tag_meta, camera_tag_meta]
+            tag_metas = [
+                counter_tag_meta,
+                part_id_tag_meta,
+                color_tag_meta,
+                camera_tag_meta,
+                category_tag_meta
+            ]
 
             for tag_meta in tag_metas:
                 if tag_meta not in project_meta.tag_metas:
@@ -187,8 +221,9 @@ def update_tags_annotation(api, selected_project_id, image_id, counter, part_id,
         counter_tag = sly.Tag(meta=counter_tag_meta, value=counter)
         part_id_tag = sly.Tag(meta=part_id_tag_meta, value=part_id)
         camera_id_tag = sly.Tag(meta=camera_tag_meta, value=camera_id)
+        category_tag = sly.Tag(meta=category_tag_meta, value=category)
 
-        tags = [counter_tag, part_id_tag, camera_id_tag]
+        tags = [counter_tag, part_id_tag, camera_id_tag, category_tag]
         if color:
             color_tag = sly.Tag(meta=color_tag_meta, value=color)
             tags.append(color_tag)
