@@ -22,7 +22,7 @@ need_processing = widgets.Switch(switched=True)
 parse_btn = widgets.Button("Parse filename")
 stop_btn = widgets.Button("Stop")
 processing_field = widgets.Field(
-    title="Marcell's image filename processor",
+    title="Lego image filename processor",
     description="If turned on, the filename of the image will be parsed and the corresponding tags will be filled",
     content=need_processing,
 )
