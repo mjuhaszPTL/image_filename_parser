@@ -23,7 +23,12 @@ import json
 import logging
 
 # PARTS = "data/parts.json"
-PARTS = "data/parts_rebrickable_category.json"
+
+# Uses rebrickable ids with rebrickable category
+# PARTS = "data/parts_rebrickable_category.json"
+
+# Uses bricklink ids with rebrickable category
+PARTS = "data/parts_bricklink_id_rebrickable_category.json"
 
 
 class PartsManager:
@@ -45,7 +50,7 @@ class PartsManager:
             self._categories = None
             self._parts = None
             self._names = None
-            self._process()
+            # self._process()
             self._initialized = True
 
     def load(self, json_file_path):
@@ -166,3 +171,9 @@ class PartsManager:
         for part in self._parts_list:
             if part.get("rebrickable_id") == rebrickable_id or part.get("name") == rebrickable_id:
                 return part.get("category")
+
+    def get_category_by_bricklink_id(self, bricklink_id):
+        # get category based on provided bricklink_id
+        for part in self._parts_list:
+            if part.get("code") == bricklink_id:
+                return part.get("category_name")

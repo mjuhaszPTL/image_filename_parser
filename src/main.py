@@ -112,8 +112,10 @@ def parse_filename_and_update_tags():
                 camera_id = parts[-1].split(".")[0]
 
                 parts_manager = PartsManager()
-                category = parts_manager.get_category_by_rebricakble_id(part_id)
+                category = parts_manager.get_category_by_bricklink_id(part_id)
                 if category is None:
+                    # FIXME: it means the bricklink id was not found in the parts list
+                    # it could be that rebrickable would have it, but it's not in the json
                     category = "Other"
 
                 sly.logger.info(
