@@ -149,7 +149,7 @@ class PartsManager:
         else:
             return None
 
-    def get_part_metadata(self, part: int | str):
+    def get_part_metadata(self, part):
         """Get the metadata for a part."""
         if isinstance(part, str):
             return self.get_part_data_by_name(part)
